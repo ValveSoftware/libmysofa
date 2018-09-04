@@ -26,6 +26,7 @@ static struct MYSOFA_EASY* mysofa_open_default(const char *filename, float sampl
 
 	easy->lookup = NULL;
 	easy->neighborhood = NULL;
+    easy->fir = NULL;
 
 	easy->hrtf = mysofa_load(filename, err);
 	if (!easy->hrtf) {
