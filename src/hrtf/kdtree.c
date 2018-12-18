@@ -35,8 +35,8 @@
 /* avoid the use of malloc because we are in real-time critical processing routines: */
 #define USE_LIST_NODE_ALLOCATOR
 /* libmysofa is by definition not thread safe */
-#define NO_PTHREADS
-#define I_WANT_THREAD_BUGS
+//#define NO_PTHREADS
+//#define I_WANT_THREAD_BUGS
 
 #if defined(WIN32) || defined(__WIN32__)
 #include <malloc.h>
@@ -45,7 +45,13 @@
 #ifdef USE_LIST_NODE_ALLOCATOR
 
 #ifndef NO_PTHREADS
+#if defined(_WIN32)
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#else
 #include <pthread.h>
+#endif
 #else
 
 #ifndef I_WANT_THREAD_BUGS
@@ -750,7 +756,17 @@ static float hyperrect_dist_sq(struct kdhyperrect *rect, const float *pos) {
 static struct res_node *free_nodes;
 
 #ifndef NO_PTHREADS
+#if defined(_WIN32)
+static CRITICAL_SECTION alloc_mutex;
+static INIT_ONCE alloc_mutex_init = INIT_ONCE_STATIC_INIT;
+BOOL CALLBACK init_critical_section(PINIT_ONCE init_once, PVOID parameter, PVOID *context)
+{
+    InitializeCriticalSection(&alloc_mutex);
+    return TRUE;
+}
+#else
 static pthread_mutex_t alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 #endif
 
 static struct res_node *alloc_resnode(void)
@@ -758,7 +774,12 @@ static struct res_node *alloc_resnode(void)
 	struct res_node *node;
 
 #ifndef NO_PTHREADS
+#if defined(_WIN32)
+    InitOnceExecuteOnce(&alloc_mutex_init, init_critical_section, NULL, NULL);
+    EnterCriticalSection(&alloc_mutex);
+#else
 	pthread_mutex_lock(&alloc_mutex);
+#endif
 #endif
 
 	if(!free_nodes) {
@@ -770,7 +791,11 @@ static struct res_node *alloc_resnode(void)
 	}
 
 #ifndef NO_PTHREADS
+#if defined(_WIN32)
+    LeaveCriticalSection(&alloc_mutex);
+#else
 	pthread_mutex_unlock(&alloc_mutex);
+#endif
 #endif
 
 	return node;
@@ -779,14 +804,23 @@ static struct res_node *alloc_resnode(void)
 static void free_resnode(struct res_node *node)
 {
 #ifndef NO_PTHREADS
-	pthread_mutex_lock(&alloc_mutex);
+#if defined(_WIN32)
+    InitOnceExecuteOnce(&alloc_mutex_init, init_critical_section, NULL, NULL);
+    EnterCriticalSection(&alloc_mutex);
+#else
+    pthread_mutex_lock(&alloc_mutex);
+#endif
 #endif
 
 	node->next = free_nodes;
 	free_nodes = node;
 
 #ifndef NO_PTHREADS
-	pthread_mutex_unlock(&alloc_mutex);
+#if defined(_WIN32)
+    LeaveCriticalSection(&alloc_mutex);
+#else
+    pthread_mutex_unlock(&alloc_mutex);
+#endif
 #endif
 }
 #endif	/* list node allocator or not */
